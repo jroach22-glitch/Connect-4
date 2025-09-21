@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Connect 4 — Online</title>
+<style>
+  :root{
+    --bg: #0f172a;
+    --panel: #111827;
+    --accent: #60a5fa;
+    --grid: #0ea5e9;
+    --p1: #ef4444;
+    --p2: #f59e0b;
+    --win: #22c55e;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --shadow: 0 8px 30px rgba(0,0,0,.4);
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f8fafc; --panel:#ffffff; --text:#0f172a; --muted:#475569; --grid:#0284c7;
+      --shadow: 0 8px 24px rgba(2,6,23,.12);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 50% -200px, rgba(96,165,250,.25), transparent 60%), var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji', 'Segoe UI Symbol';}
+  .wrap{
+    max-width: 780px; margin: 0 auto; padding: clamp(12px, 4vw, 24px);
+    display:flex; flex-direction:column; gap: 14px; min-height: 100%;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  }
+  h1{font-size: clamp(20px, 4.5vw, 28px); margin:0; letter-spacing:.3px;}
+  .badge{font-size: 12px; padding:6px 10px; border-radius: 999px; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.08); box-shadow: var(--shadow); color: var(--muted)}
+  .card{
+    background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.08);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .controls{
+    display:grid; grid-template-columns: 1fr auto; align-items:center; gap:10px; padding:12px;
+  }
+  .status{
+    display:flex; align-items:center; gap:10px; font-weight:600;
+  }
+  .dot{width:16px;height:16px;border-radius:50%; box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.2); flex: 0 0 auto;}
+  .turn{opacity:.9}
+  .buttons{display:flex; gap:8px; flex-wrap:wrap}
+  button{
+    appearance:none; border:0; padding:10px 12px; border-radius:10px; font-weight:600; cursor:pointer;
+    background: var(--panel); color: var(--text); border:1px solid rgba(255,255,255,.08);
+    box-shadow: var(--shadow); transition: transform .06s ease, filter .2s ease, background .2s;
+    letter-spacing:.2px;
+  }
+  button:active{ transform: translateY(1px) scale(.997); }
+  button.primary{ background: linear-gradient(180deg, var(--accent), #3b82f6); color:#fff; border-color: rgba(59,130,246,.5); }
+  button.ghost{ background: transparent; }
+  .picker{ display:flex; gap:10px; align-items:center; font-size: 13px; color: var(--muted); flex-wrap: wrap;}
+  .picker label{display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:8px; border:1px dashed rgba(148,163,184,.3);}
+  input[type="color"]{ width:28px; height:28px; border-radius:8px; border:1px solid rgba(0,0,0,.2); background:transparent; padding:0}
+  .board-card{ padding: 14px; }
+  .board{
+    width: 100%; aspect-ratio: 7 / 7.2;
+    display:block;
+    touch-action: manipulation;
+  }
+  .footer{ margin-top:auto; display:flex; justify-content:center; opacity:.6; font-size:12px; padding:6px 0 10px }
+  .toast{ position: fixed; inset: auto 12px 12px 12px; margin: 0 auto; max-width: 680px; background: #111827; color:#fff; border:1px solid rgba(255,255,255,.1); padding:10px 14px; border-radius: 12px; box-shadow: var(--shadow); display:none }
+  .toast.show{ display:block; animation: fadein .25s ease }
+  @keyframes fadein{ from{ opacity:0; transform: translateY(8px)} to{opacity:1; transform:none} }
+  @media (prefers-reduced-motion: reduce){
+    .board *{ transition: none !important; }
+  }
+  .perf-off .board *{ filter: none !important; }
+  .net{ display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+  .net .info{ font-size:12px; color:var(--muted) }
+  input.room{ width:140px; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.12); background:var(--panel); color:var(--text); font-weight:600 }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Connect 4 <span class="badge">online</span></h1>
+      <div class="picker card" style="padding:8px 10px;">
+        <label> P1 <input type="color" id="p1Color" value="#ef4444" /></label>
+        <label> P2 <input type="color" id="p2Color" value="#f59e0b" /></label>
+        <button id="swap" class="ghost">Swap</button>
+      </div>
+    </header>
+
+    <section class="card controls">
+      <div class="status">
+        <span class="dot" id="turnDot"></span>
+        <span id="statusText" class="turn">Player 1’s turn</span>
+      </div>
+      <div class="buttons">
+        <button id="undo">Undo</button>
+        <button id="restart">Restart</button>
+        <button id="mute" class="ghost">🔊</button>
+        <button id="perf" class="ghost" title="Performance mode">⚡</button>
+        <button id="help" class="ghost">?</button>
+      </div>
+    </section>
+
+    <section class="card controls">
+      <div class="net">
+        <input class="room" id="roomInput" placeholder="Room code" />
+        <button id="createRoom" class="primary">Create Room</button>
+        <button id="joinRoom">Join Room</button>
+        <button id="copyLink" class="ghost">Copy Invite</button>
+        <span class="info" id="netInfo">Not connected</span>
+      </div>
+    </section>
+
+    <section class="card board-card">
+      <svg id="board" class="board" viewBox="0 0 700 720" preserveAspectRatio="xMidYMid meet" aria-label="Connect 4 board" role="img">
+        <defs>
+          <mask id="holes">
+            <rect x="0" y="80" width="700" height="640" fill="white"/>
+            <g id="holesGroup"></g>
+          </mask>
+          <filter id="chipShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".4"/>
+          </filter>
+        </defs>
+        <g id="columnTargets"></g>
+        <g id="chips"></g>
+        <rect x="0" y="80" width="700" height="640" fill="url(#gradBoard)" mask="url(#holes)" rx="24" ry="24"/>
+        <defs>
+          <linearGradient id="gradBoard" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#0ea5e9"/>
+            <stop offset="100%" stop-color="#0369a1"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </section>
+
+    <div class="footer">Tip: tap a column header to drop your chip • Local or online play</div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- Socket.IO client -->
+  <script src="/socket.io/socket.io.js"></script>
+
+<script>
+(() => {
+  const ROWS = 6, COLS = 7;
+  const CELL = 100, TOP = 80;
+  const DROP_MS = 280;
+  const state = {
+    board: Array.from({length: ROWS}, () => Array(COLS).fill(0)),
+    turn: 1,
+    history: [],
+    locked: false,
+    busy: false,
+    muted: false,
+    perf: false,
+    colors: {1: getCSS('--p1'), 2: getCSS('--p2')},
+    audioCtx: null,
+    online: false,
+    myPlayer: null,
+    room: null,
+  };
+
+  function getCSS(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function setCSS(name, value){ document.documentElement.style.setProperty(name, value); }
+
+  const statusText = document.getElementById('statusText');
+  const turnDot = document.getElementById('turnDot');
+  const chipsLayer = document.getElementById('chips');
+  const holesGroup = document.getElementById('holesGroup');
+  const columnTargets = document.getElementById('columnTargets');
+  const toast = document.getElementById('toast');
+  const netInfo = document.getElementById('netInfo');
+  const roomInput = document.getElementById('roomInput');
+
+  // Init holes + column targets
+  for (let c=0;c<COLS;c++){
+    for (let r=0;r<ROWS;r++){
+      const cx = CELL/2 + c*CELL, cy = TOP + CELL/2 + r*CELL;
+      const hole = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      hole.setAttribute('cx', cx); hole.setAttribute('cy', cy); hole.setAttribute('r', 40);
+      hole.setAttribute('fill', 'black');
+      holesGroup.appendChild(hole);
+    }
+    const target = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    target.setAttribute('x', c*CELL); target.setAttribute('y', 0); target.setAttribute('width', CELL); target.setAttribute('height', TOP);
+    target.setAttribute('fill', 'transparent');
+    target.style.cursor = 'pointer';
+    target.style.touchAction = 'manipulation';
+    target.addEventListener('pointerup', (e) => { e.preventDefault(); handleColumnTap(c); }, {passive:false});
+    columnTargets.appendChild(target);
+
+    const arrow = document.createElementNS('http://www.w3.org/2000/svg','path');
+    const ax = c*CELL + CELL/2;
+    arrow.setAttribute('d', `M ${ax-12} 40 L ${ax} 58 L ${ax+12} 40`);
+    arrow.setAttribute('stroke', 'rgba(255,255,255,.85)');
+    arrow.setAttribute('stroke-width', '4');
+    arrow.setAttribute('fill', 'none');
+    arrow.setAttribute('opacity', '.25');
+    columnTargets.appendChild(arrow);
+  }
+
+  function ensureAudio(){
+    if (state.muted) return null;
+    if (!state.audioCtx){
+      try{ state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ state.audioCtx = null; }
+    }
+    return state.audioCtx;
+  }
+  function playTone(freq=600, ms=90){
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    try{
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + ms/1000);
+      o.start(); o.stop(ctx.currentTime + ms/1000 + 0.02);
+    }catch(e){}
+  }
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1600);
+  }
+  function updateStatus(txt){
+    statusText.textContent = txt;
+    turnDot.style.background = state.turn === 1 ? state.colors[1] : state.colors[2];
+  }
+  function nextOpenRow(col){
+    for (let r=ROWS-1; r>=0; r--) if (state.board[r][col] === 0) return r;
+    return -1;
+  }
+  function inBounds(r,c){ return r>=0 && r<ROWS && c>=0 && c<COLS; }
+  function checkWin(piece){
+    const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+    for (let r=0;r<ROWS;r++){
+      for (let c=0;c<COLS;c++){
+        if (state.board[r][c] !== piece) continue;
+        for (const [dr,dc] of dirs){
+          let k=1, cells=[[r,c]];
+          while (k<4 && inBounds(r+dr*k, c+dc*k) && state.board[r+dr*k][c+dc*k]===piece){
+            cells.push([r+dr*k, c+dc*k]); k++;
+          }
+          if (k===4) return cells;
+        }
+      }
+    }
+    return null;
+  }
+  function isBoardFull(){ return state.board.every(row => row.every(v => v!==0)); }
+
+  // Animated chip (CSS transform) — FIXED: enable transform on SVG circles
+  function createChip(col, row, piece){
+    const cx = CELL/2 + col*CELL, cy = TOP + CELL/2 + row*CELL;
+    const chip = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    chip.setAttribute('cx', cx);
+    chip.setAttribute('cy', TOP - 50);
+    chip.setAttribute('r', 38);
+    chip.setAttribute('fill', piece===1? state.colors[1] : state.colors[2]);
+    if (!state.perf) chip.setAttribute('filter', 'url(#chipShadow)');
+    chip.style.transformBox = 'fill-box';
+    chip.style.transformOrigin = 'center';
+    chip.style.transition = state.perf ? 'none' : `transform ${DROP_MS}ms cubic-bezier(.2,.9,.22,1.2)`;
+    requestAnimationFrame(() => {
+      chip.style.transform = `translateY(${cy-(TOP-50)}px)`;
+    });
+    chipsLayer.appendChild(chip);
+    return chip;
+  }
+
+  // Static chip (for server state re-render)
+  function createChipStatic(col, row, piece){
+    const cx = CELL/2 + col*CELL, cy = TOP + CELL/2 + row*CELL;
+    const chip = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    chip.setAttribute('cx', cx);
+    chip.setAttribute('cy', cy);
+    chip.setAttribute('r', 38);
+    chip.setAttribute('fill', piece===1? state.colors[1] : state.colors[2]);
+    if (!state.perf) chip.setAttribute('filter', 'url(#chipShadow)');
+    chipsLayer.appendChild(chip);
+    return chip;
+  }
+
+  function highlightWin(cells){
+    cells.forEach(([r,c],i) => {
+      const cx = CELL/2 + c*CELL, cy = TOP + CELL/2 + r*CELL;
+      const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', 38);
+      ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', 'var(--win)'); ring.setAttribute('stroke-width', '6');
+      ring.style.opacity = '0';
+      ring.style.transition = state.perf ? 'none' : 'opacity .25s ease';
+      chipsLayer.appendChild(ring);
+      setTimeout(() => ring.style.opacity = '1', 60 + i*80);
+    });
+  }
+
+  // LOCAL move handler
+  function onColumnTapLocal(col){
+    if (state.locked || state.busy) return;
+    const row = nextOpenRow(col);
+    if (row === -1){ showToast('Column is full'); playTone(220,80); return; }
+    state.busy = true;
+
+    const piece = state.turn;
+    state.board[row][col] = piece;
+    const chip = createChip(col, row, piece);
+    state.history.push({row,col, piece, chip});
+    playTone(piece===1? 660:520, 90);
+
+    setTimeout(() => {
+      const winCells = checkWin(piece);
+      if (winCells){
+        state.locked = true;
+        updateStatus(`Player ${piece} wins! 🎉`);
+        highlightWin(winCells);
+        playTone(740,120); setTimeout(()=>playTone(880,160),110);
+        state.busy = false;
+        return;
+      }
+      if (isBoardFull()){
+        state.locked = true;
+        updateStatus(`It's a draw.`);
+        showToast('Board is full.');
+        playTone(300,150);
+        state.busy = false;
+        return;
+      }
+      state.turn = 3 - state.turn;
+      updateStatus(`Player ${state.turn}’s turn`);
+      state.busy = false;
+    }, state.perf ? 0 : DROP_MS);
+  }
+
+  function resetBoard(){
+    state.board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+    state.turn = 1; state.locked = false; state.history = []; state.busy = false;
+    while (chipsLayer.firstChild) chipsLayer.removeChild(chipsLayer.firstChild);
+    updateStatus('Player 1’s turn');
+  }
+  function undoMove(){
+    if (!state.history.length || state.locked || state.busy) return;
+    const last = state.history.pop();
+    state.board[last.row][last.col] = 0;
+    if (last.chip && last.chip.remove) last.chip.remove();
+    state.turn = last.piece;
+    updateStatus(`Player ${state.turn}’s turn`);
+    playTone(420,90);
+  }
+
+  // UI events
+  document.getElementById('restart').addEventListener('click', () => {
+    if (state.online && state.room) {
+      socket.emit("restart", { room: state.room });
+    } else {
+      resetBoard(); showToast('Board reset');
+    }
+  });
+  document.getElementById('undo').addEventListener('click', () => undoMove());
+  document.getElementById('mute').addEventListener('click', (e) => {
+    state.muted = !state.muted;
+    if (!state.muted) ensureAudio();
+    e.currentTarget.textContent = state.muted ? '🔇' : '🔊';
+    showToast(state.muted? 'Sound off':'Sound on');
+  });
+  document.getElementById('help').addEventListener('click', () => {
+    showToast('Tap a column to drop your chip • Local or Online play • Use the room section to invite a friend');
+  });
+  document.getElementById('perf').addEventListener('click', (e) => {
+    state.perf = !state.perf;
+    document.body.classList.toggle('perf-off', state.perf);
+    e.currentTarget.classList.toggle('primary', state.perf);
+    e.currentTarget.title = state.perf ? 'Performance mode: ON' : 'Performance mode: OFF';
+    showToast(state.perf ? 'Performance mode ON' : 'Performance mode OFF');
+  });
+
+  const p1Color = document.getElementById('p1Color');
+  const p2Color = document.getElementById('p2Color');
+  function applyColors(){
+    state.colors[1] = p1Color.value;
+    state.colors[2] = p2Color.value;
+    setCSS('--p1', p1Color.value);
+    setCSS('--p2', p2Color.value);
+    const chips = Array.from(chipsLayer.querySelectorAll('circle'));
+    chips.forEach((chip, idx) => {
+      const piece = state.history[idx]?.piece || 1;
+      chip.setAttribute('fill', piece===1? state.colors[1] : state.colors[2]);
+    });
+    turnDot.style.background = state.turn===1? state.colors[1] : state.colors[2];
+  }
+  p1Color.addEventListener('input', applyColors);
+  p2Color.addEventListener('input', applyColors);
+  document.getElementById('swap').addEventListener('click', () => {
+    const a = p1Color.value; p1Color.value = p2Color.value; p2Color.value = a; applyColors();
+  });
+
+  // ---------- ONLINE (Socket.IO) ----------
+  const socket = io(); // same origin
+  socket.on("connect_error", () => { /* ignore if offline */ });
+
+  function makeCode(n=6){
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    return Array.from({length:n},()=>chars[Math.floor(Math.random()*chars.length)]).join("");
+  }
+
+  function setNetInfo(txt){ netInfo.textContent = txt; }
+
+  document.getElementById('createRoom').addEventListener('click', () => {
+    const code = makeCode();
+    roomInput.value = code;
+    joinRoom(code);
+  });
+  document.getElementById('joinRoom').addEventListener('click', () => {
+    const code = (roomInput.value || '').trim().toUpperCase();
+    if (!code) { showToast('Enter a room code'); return; }
+    joinRoom(code);
+  });
+  document.getElementById('copyLink').addEventListener('click', async () => {
+    if (!state.room){ showToast('Create or join a room first'); return; }
+    const url = new URL(location.href);
+    url.searchParams.set("room", state.room);
+    try{
+      await navigator.clipboard.writeText(url.toString());
+      showToast('Invite link copied!');
+    }catch(e){
+      prompt('Copy this link:', url.toString());
+    }
+  });
+
+  function joinRoom(code){
+    state.room = code;
+    state.online = true;
+    socket.emit("join", { room: code });
+    setNetInfo(`Joining room ${code}…`);
+    const url = new URL(location.href);
+    url.searchParams.set("room", code);
+    history.replaceState(null, "", url.toString());
+  }
+
+  socket.on("joined", ({ me }) => {
+    state.myPlayer = me;
+    setNetInfo(`Connected as Player ${me} in room ${state.room}`);
+    showToast(`You are Player ${me}`);
+  });
+
+  socket.on("error_msg", (msg) => { showToast(msg); });
+
+  socket.on("state", (g) => {
+    // Apply server state
+    state.board = g.board;
+    state.turn = g.turn;
+    state.locked = g.status === "finished";
+    while (chipsLayer.firstChild) chipsLayer.removeChild(chipsLayer.firstChild);
+    for (let r=0;r<ROWS;r++){
+      for (let c=0;c<COLS;c++){
+        const piece = g.board[r][c];
+        if (piece) createChipStatic(c, r, piece);
+      }
+    }
+    if (g.status === "finished") {
+      updateStatus(g.winner ? `Player ${g.winner} wins! 🎉` : "It's a draw.");
+    } else {
+      updateStatus(g.status === "waiting" ? "Waiting for opponent…" : `Player ${g.turn}’s turn`);
+    }
+  });
+
+  // Column tap router
+  function handleColumnTap(col){
+    if (state.online && state.room){
+      socket.emit("move", { room: state.room, col });
+    } else {
+      onColumnTapLocal(col);
+    }
+  }
+
+  // initial
+  applyColors();
+  updateStatus('Player 1’s turn');
+
+  // if URL has ?room=..., auto-join
+  const params = new URLSearchParams(location.search);
+  const urlRoom = params.get('room');
+  if (urlRoom){ roomInput.value = urlRoom.toUpperCase(); joinRoom(urlRoom.toUpperCase()); }
+})();
+</script>
+</body>
+</html>
